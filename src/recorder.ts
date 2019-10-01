@@ -5,25 +5,26 @@ export interface IOptionsMaybe {
   mono?: boolean
   quietThresholdTime?: number
   volumeThreshold?: number
+  sampleRate?: number
 }
+
 export interface IOptions {
   mono: boolean
   quietThresholdTime: number
   volumeThreshold: number
+  sampleRate?: number
 }
 
 declare function require(name: string): any
 
 const worker = require('worker-loader?inline=true!./workers/recorder.worker')
 
-const AudioContextPolyfill = (window as any).webkitAudioContext || (window as any).AudioContext
-
-const audioContext: AudioContext = new AudioContextPolyfill()
+const AudioContextPolyfill = (window as any).AudioContext || (window as any).webkitAudioContext
 
 export class Recorder extends EventTarget {
   private recording: boolean
   private ready: boolean
-  private bufferLen: number
+  private readonly bufferLen: number
   private options: IOptions
   private quietTime: number
   private maxVolume: number
@@ -31,10 +32,10 @@ export class Recorder extends EventTarget {
   private analyserData: Float32Array
   private scriptProcessorNode?: ScriptProcessorNode
   private analyserNode?: AnalyserNode
-  private context?: AudioContext
+  private context: AudioContext
   private gainNode?: GainNode
   private source?: MediaStreamAudioSourceNode
-  private exportInterval?: number
+  // private exportInterval?: number;
   private audioTracks?: MediaStreamTrack[]
 
   constructor(private stream: MediaStream, options: IOptionsMaybe = {}) {
@@ -50,9 +51,11 @@ export class Recorder extends EventTarget {
     this.options = {
       mono: options.mono || true,
       quietThresholdTime: options.quietThresholdTime || 5,
-      volumeThreshold: options.volumeThreshold || -60
+      volumeThreshold: options.volumeThreshold || -60,
+      sampleRate: options.sampleRate
     }
 
+    this.context = new AudioContextPolyfill()
     this.onAudioProcess = this.onAudioProcess.bind(this)
     this.onWorkerMessage = this.onWorkerMessage.bind(this)
   }
@@ -91,32 +94,32 @@ export class Recorder extends EventTarget {
     // Init the worker
     this.worker.addEventListener('message', this.onWorkerMessage)
 
-    this.scriptProcessorNode = audioContext.createScriptProcessor(this.bufferLen, 2, 2)
-    this.scriptProcessorNode.connect(audioContext.destination)
+    this.scriptProcessorNode = this.context.createScriptProcessor(this.bufferLen, 2, 2)
+    this.scriptProcessorNode.connect(this.context.destination)
     this.scriptProcessorNode.addEventListener('audioprocess', this.onAudioProcess)
 
-    this.source = audioContext.createMediaStreamSource(this.stream)
+    this.source = this.context.createMediaStreamSource(this.stream)
 
     this.audioTracks = this.stream.getAudioTracks()
 
-    this.analyserNode = audioContext.createAnalyser()
+    this.analyserNode = this.context.createAnalyser()
     this.analyserNode.fftSize = 2048
     this.analyserNode.minDecibels = -90
     this.analyserNode.maxDecibels = -30
     this.analyserNode.connect(this.scriptProcessorNode)
     this.analyserData = new Float32Array(this.analyserNode.frequencyBinCount)
 
-    this.gainNode = audioContext.createGain()
+    this.gainNode = this.context.createGain()
     // no feedback
-    this.gainNode.gain.setValueAtTime(0.0, audioContext.currentTime)
-    this.gainNode.connect(audioContext.destination)
+    this.gainNode.gain.setValueAtTime(0.0, this.context.currentTime)
+    this.gainNode.connect(this.context.destination)
 
     this.source.connect(this.gainNode)
     this.source.connect(this.scriptProcessorNode)
     this.source.connect(this.analyserNode)
 
     const config: IConfig = {
-      sampleRate: audioContext.sampleRate,
+      sampleRate: this.context.sampleRate,
       numChannels: this.options.mono ? 1 : this.stream.getAudioTracks().length
     }
 
@@ -126,7 +129,7 @@ export class Recorder extends EventTarget {
     })
 
     this.ready = true
-    this.quietTime = audioContext.currentTime
+    this.quietTime = this.context.currentTime
 
     this.dispatchEvent(new CustomEvent('ready'))
   }
@@ -143,6 +146,7 @@ export class Recorder extends EventTarget {
         break
     }
   }
+
   private onAudioProcess(ev: AudioProcessingEvent): void {
     if (!this.recording) {
       return
@@ -160,8 +164,9 @@ export class Recorder extends EventTarget {
     this.maxVolume = Math.max(...Array.from(this.analyserData))
     this.isQuiet()
   }
+
   private isQuiet() {
-    const now = audioContext.currentTime
+    const now = this.context.currentTime
     const delta = now - this.quietTime
     const isMicQuiet = this.maxVolume < this.options.volumeThreshold
 
@@ -169,9 +174,10 @@ export class Recorder extends EventTarget {
       this.stop()
     }
     if (!isMicQuiet) {
-      this.quietTime = audioContext.currentTime
+      this.quietTime = this.context.currentTime
     }
   }
+
   private kill() {
     if (this.audioTracks) {
       this.audioTracks.forEach((mediaStreamTrack: MediaStreamTrack) => {
@@ -182,16 +188,19 @@ export class Recorder extends EventTarget {
       this.source.disconnect(this.scriptProcessorNode)
     }
     if (this.scriptProcessorNode) {
-      this.scriptProcessorNode.disconnect(audioContext.destination)
+      this.scriptProcessorNode.disconnect(this.context.destination)
     }
     this.worker.terminate()
     this.dispatchEvent(new CustomEvent('end'))
   }
 
-  private exportWAV(type: string = 'audio/wav') {
+  private exportWAV(
+    type: string = 'audio/wav',
+    rate: number | undefined = this.options.sampleRate
+  ) {
     this.worker.postMessage({
       command: 'exportWAV',
-      payload: { type }
+      payload: { type, rate }
     })
   }
 }
