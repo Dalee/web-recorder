@@ -3,7 +3,13 @@
     "moduleResolution": "node",
     "target": "es5",
     "module": "es6",
-    "lib": ["es2015", "es2016", "es2017", "webworker", "scripthost"],
+    "lib": [
+      "es2015",
+      "es2016",
+      "es2017",
+      "webworker",
+      "scripthost"
+    ],
     "strict": true,
     "sourceMap": true,
     "allowSyntheticDefaultImports": true,
@@ -12,8 +18,15 @@
     "declaration": true,
     "declarationDir": "dist/types",
     "outDir": "compiled",
-    "typeRoots": ["node_modules/@types", "../typing"]
+    "typeRoots": [
+      "node_modules/@types",
+      "../typing"
+    ]
   },
-  "include": ["."],
-  "exclude": ["node_modules"]
+  "include": [
+    "."
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
