@@ -27,7 +27,6 @@
   },
   "scripts": {
     "prepublish": "npm run build",
-    "prepush": "npm run build",
     "lint": "tslint -t codeFrame 'src/**/*.ts' 'test/**/*.ts'",
     "prebuild": "rimraf dist",
     "build": "tsc && webpack -d && webpack -p --env.prod && rimraf compiled && typedoc --out dist/docs --target es6 --theme minimal src",
@@ -72,8 +71,7 @@
         "statements": 95
       }
     },
-    "collectCoverage": true,
-    "mapCoverage": true
+    "collectCoverage": true
   },
   "devDependencies": {
     "@types/jest": "22.2.0",
@@ -103,7 +101,8 @@
   "husky": {
     "hooks": {
       "post-commit": "git update-index --again",
-      "pre-commit": "lint-staged"
+      "pre-commit": "lint-staged",
+      "pre-push": "npm run build"
     }
   }
 }
